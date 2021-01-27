@@ -6,6 +6,7 @@ const { UniswapPriceFeed } = require("./UniswapPriceFeed");
 const { BalancerPriceFeed } = require("./BalancerPriceFeed");
 const { DominationFinancePriceFeed } = require("./DominationFinancePriceFeed");
 const { BasketSpreadPriceFeed } = require("./BasketSpreadPriceFeed");
+const { CoinMarketCapPriceFeed } = require("./CoinMarketCapPriceFeed");
 const { defaultConfigs } = require("./DefaultPriceFeedConfigs");
 const { getTruffleContract } = require("@uma/core");
 
@@ -162,6 +163,32 @@ async function createPriceFeed(logger, web3, networker, getTime, config) {
       config.denominatorPriceFeed && (await _createMedianizerPriceFeed(config.denominatorPriceFeed));
 
     return new BasketSpreadPriceFeed(web3, logger, baselinePriceFeeds, experimentalPriceFeeds, denominatorPriceFeed);
+  } else if (config.type === "coinmarketcap") {
+    const requiredFields = ["apiKey", "symbol", "convert", "lookback", "minTimeBetweenUpdates"];
+
+    if (isMissingField(config, requiredFields, logger)) {
+      return null;
+    }
+
+    logger.debug({
+      at: "createPriceFeed",
+      message: "Creating CoingMarketCapPriceFeed",
+      config
+    });
+
+    return new CoinMarketCapPriceFeed(
+      logger,
+      web3,
+      config.apiKey,
+      config.symbol,
+      config.convert,
+      config.lookback,
+      networker,
+      getTime,
+      config.minTimeBetweenUpdates,
+      config.invertPrice, // Not checked in config because this parameter just defaults to false.
+      config.priceFeedDecimals, // Defaults to 18 unless supplied. Informs how the feed should be scaled to match a DVM response.
+    );
   }
 
   logger.error({
