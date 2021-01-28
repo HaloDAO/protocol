@@ -51,12 +51,12 @@ contract("CoinGeckoPriceFeed.js", function() {
 
     await coinGeckoPriceFeed.update();
 
-    const price = coinGeckoPriceFeed.getCurrentPrice()
+    const price = coinGeckoPriceFeed.getCurrentPrice();
     assert.equal(price.toString(), toWei(`${mockPrice}`));
   });
 
   it("getCurrentPrice() returns undefined if update() is never called", async function() {
-    const price = coinGeckoPriceFeed.getCurrentPrice()
+    const price = coinGeckoPriceFeed.getCurrentPrice();
     assert.equal(price, undefined);
   });
 
@@ -87,7 +87,7 @@ contract("CoinGeckoPriceFeed.js", function() {
   });
 
   it("getHistoricalPrice() returns undefined if update() is never called", async function() {
-    const price = coinGeckoPriceFeed.getHistoricalPrice(mockTime)
+    const price = coinGeckoPriceFeed.getHistoricalPrice(mockTime);
     assert.equal(price, undefined);
   });
 
@@ -95,8 +95,8 @@ contract("CoinGeckoPriceFeed.js", function() {
     networker.getJsonReturns = [ validResponse ];
 
     await coinGeckoPriceFeed.update();
-    
-    const price = coinGeckoPriceFeed.getHistoricalPrice(mockTime - lookback)
+
+    const price = coinGeckoPriceFeed.getHistoricalPrice(mockTime - lookback);
     assert.equal(price.toString(), toWei(`${mockPrice}`));
   });
 
@@ -105,7 +105,7 @@ contract("CoinGeckoPriceFeed.js", function() {
 
     await coinGeckoPriceFeed.update();
 
-    const price = coinGeckoPriceFeed.getHistoricalPrice(mockTime - lookback - 1)
+    const price = coinGeckoPriceFeed.getHistoricalPrice(mockTime - lookback - 1);
     assert.equal(price, undefined);
   });
 
@@ -114,7 +114,7 @@ contract("CoinGeckoPriceFeed.js", function() {
 
     await coinGeckoPriceFeed.update();
 
-    const price = coinGeckoPriceFeed.getHistoricalPrice(mockTime + 1)
+    const price = coinGeckoPriceFeed.getHistoricalPrice(mockTime + 1);
     assert.equal(price, undefined);
   });
 
@@ -143,13 +143,13 @@ contract("CoinGeckoPriceFeed.js", function() {
       {}
     ];
 
-    const errorCatched = await coinGeckoPriceFeed.update().catch(() => true)
+    const errorCatched = await coinGeckoPriceFeed.update().catch(() => true);
     assert.isTrue(errorCatched, "Update didn't throw");
 
-    const price = coinGeckoPriceFeed.getCurrentPrice() 
+    const price = coinGeckoPriceFeed.getCurrentPrice() ;
     assert.equal(price, undefined);
 
-    const time = coinGeckoPriceFeed.getHistoricalPrice(mockTime)
+    const time = coinGeckoPriceFeed.getHistoricalPrice(mockTime);
     assert.equal(time, undefined);
   });
 
@@ -184,7 +184,7 @@ contract("CoinGeckoPriceFeed.js", function() {
       transports: [new winston.transports.Console()]
     });
 
-    const cmcInvertedPriceFeed = new CoinGeckoPriceFeed(
+    const cgInvertedPriceFeed = new CoinGeckoPriceFeed(
       dummyLogger,
       web3,
       contractAddress,
@@ -200,7 +200,7 @@ contract("CoinGeckoPriceFeed.js", function() {
     // Here comes the actual tests
     networker.getJsonReturns = [ validResponse ];
 
-    await cmcInvertedPriceFeed.update();
+    await cgInvertedPriceFeed.update();
 
     const invertedPrice = toBN(toWei("1"))
       .mul(toBN(toWei("1")))
@@ -208,13 +208,22 @@ contract("CoinGeckoPriceFeed.js", function() {
       // we need this last division to convert final result to correct decimals
       // in this case its from 18 decimals to 10 decimals.
       // .div(toBN("10").pow(toBN(18 - 10)))
-      .toString()
+      .toString();
 
-    const price = cmcInvertedPriceFeed.getCurrentPrice()
+    const price = cgInvertedPriceFeed.getCurrentPrice();
     assert.equal(price.toString(), invertedPrice);
 
-    const historicalPrice = cmcInvertedPriceFeed.getHistoricalPrice(mockTime)
+    const historicalPrice = cgInvertedPriceFeed.getHistoricalPrice(mockTime);
     assert.equal(historicalPrice.toString(), invertedPrice);
+  });
+
+  it("Produces correct url", async function() {
+    networker.getJsonReturns = [ validResponse ];
+    await coinGeckoPriceFeed.update();
+
+    assert.deepStrictEqual(networker.getJsonInputs, [
+      `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${contractAddress}&vs_currencies=${currency}`
+    ]);
   });
 
 });

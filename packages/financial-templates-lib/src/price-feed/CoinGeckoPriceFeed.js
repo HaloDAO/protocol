@@ -69,7 +69,7 @@ class CoinGeckoPriceFeed extends PriceFeedInterface {
     // 1. Construct URL.
     // See https://www.coingecko.com/api/documentations/v3#/operations/simple/get_simple_token_price__id_ for how this url is constructed.
     const url =
-      `curl -X GET "https://api.coingecko.com/api/v3/simple/token_price/ethereum` +
+      `https://api.coingecko.com/api/v3/simple/token_price/ethereum` +
       `?contract_addresses=${this.contractAddress}&vs_currencies=${this.currency}`;
 
     // 2. Send request.
