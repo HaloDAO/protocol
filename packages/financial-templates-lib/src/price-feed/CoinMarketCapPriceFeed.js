@@ -69,17 +69,17 @@ class CoinMarketCapPriceFeed extends PriceFeedInterface {
       lastUpdateTimestamp: this.lastUpdateTime
     });
 
-    // 1. Construct URLs.
+    // 1. Construct URL.
     // See https://coinmarketcap.com/api/documentation/v1/#operation/getV1CryptocurrencyQuotesLatest for how this url is constructed.
     const url =
       `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?` +
       `symbol=${this.symbol}&convert=${this.convert}` +
       (this.apiKey ? `&CMC_PRO_API_KEY=${this.apiKey}` : '');
 
-    // 2. Send requests.
-    const response = await this.networker.getJson(url)
+    // 2. Send request.
+    const response = await this.networker.getJson(url);
 
-    // 3. Check responses.
+    // 3. Check response.
     if (!response ||
       !response.data ||
       !response.data[this.symbol] ||
@@ -88,7 +88,7 @@ class CoinMarketCapPriceFeed extends PriceFeedInterface {
       throw new Error(`🚨Could not parse result from url ${url}: ${JSON.stringify(response)}`);
     }
 
-    // 4. Parse results.
+    // 4. Parse result.
     // Return data structure:
     // {
     //   "data": {
@@ -120,8 +120,8 @@ class CoinMarketCapPriceFeed extends PriceFeedInterface {
     
     let matchingPrice;
     for (const history of this.priceHistory) {
-      const minTime = history.time - this.lookback
-      const maxTime = history.time
+      const minTime = history.time - this.lookback;
+      const maxTime = history.time;
 
       if (time >= minTime && time <= maxTime) {
         matchingPrice = history.price;
@@ -153,7 +153,7 @@ class CoinMarketCapPriceFeed extends PriceFeedInterface {
     // returns price conversion to correct decimals as a big number.
     // Note: Must ensure that `number` has no more decimal places than `priceFeedDecimals`.
     return this.web3.utils.toBN(parseFixed(number.toString().substring(0, this.priceFeedDecimals), this.priceFeedDecimals).toString());
-  };
+  }
 
   _invertPriceSafely(priceBN) {
     if (priceBN && !priceBN.isZero()) {

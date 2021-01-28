@@ -20,9 +20,9 @@ contract("CoinMarketCapPriceFeed.js", function() {
   const mockPrice = 48.200162117610525;
   const validResponse = {
     data: {
-      DAI: {
+      [symbol]: {
         quote: {
-          PHP: {
+          [convert]: {
             price: mockPrice
           }
         }
@@ -59,21 +59,21 @@ contract("CoinMarketCapPriceFeed.js", function() {
 
     await coinMarketCapPriceFeed.update();
 
-    const price = coinMarketCapPriceFeed.getCurrentPrice()
+    const price = coinMarketCapPriceFeed.getCurrentPrice();
     assert.equal(price.toString(), toWei(`${mockPrice}`));
   });
 
   it("getCurrentPrice() returns undefined if update() is never called", async function() {
-    const price = coinMarketCapPriceFeed.getCurrentPrice()
+    const price = coinMarketCapPriceFeed.getCurrentPrice();
     assert.equal(price, undefined);
   });
 
   it("getHistoricalPrice() returns the price for the specified time", async function() {
     // Run a series of updates()
     networker.getJsonReturns = [
-      { data: { DAI: { quote: { PHP: { price: mockPrice } } } } },
-      { data: { DAI: { quote: { PHP: { price: mockPrice + 1 } } } } },
-      { data: { DAI: { quote: { PHP: { price: mockPrice + 2 } } } } }
+      { data: { [symbol]: { quote: { [convert]: { price: mockPrice } } } } },
+      { data: { [symbol]: { quote: { [convert]: { price: mockPrice + 1 } } } } },
+      { data: { [symbol]: { quote: { [convert]: { price: mockPrice + 2 } } } } }
     ];
 
     const originalMockTime = mockTime;
@@ -104,7 +104,7 @@ contract("CoinMarketCapPriceFeed.js", function() {
 
     await coinMarketCapPriceFeed.update();
 
-    const price = coinMarketCapPriceFeed.getHistoricalPrice(mockTime - lookback)
+    const price = coinMarketCapPriceFeed.getHistoricalPrice(mockTime - lookback);
     assert.equal(price.toString(), toWei(`${mockPrice}`));
   });
 
@@ -113,7 +113,7 @@ contract("CoinMarketCapPriceFeed.js", function() {
 
     await coinMarketCapPriceFeed.update();
 
-    const price = coinMarketCapPriceFeed.getHistoricalPrice(mockTime - lookback - 1)
+    const price = coinMarketCapPriceFeed.getHistoricalPrice(mockTime - lookback - 1);
     assert.equal(price, undefined);
   });
 
@@ -122,7 +122,7 @@ contract("CoinMarketCapPriceFeed.js", function() {
 
     await coinMarketCapPriceFeed.update();
 
-    const price = coinMarketCapPriceFeed.getHistoricalPrice(mockTime + 1)
+    const price = coinMarketCapPriceFeed.getHistoricalPrice(mockTime + 1);
     assert.equal(price, undefined);
   });
 
@@ -155,20 +155,20 @@ contract("CoinMarketCapPriceFeed.js", function() {
       }
     ];
 
-    const errorCatched = await coinMarketCapPriceFeed.update().catch(() => true)
+    const errorCatched = await coinMarketCapPriceFeed.update().catch(() => true);
     assert.isTrue(errorCatched, "Update didn't throw");
 
-    const price = coinMarketCapPriceFeed.getCurrentPrice() 
+    const price = coinMarketCapPriceFeed.getCurrentPrice();
     assert.equal(price, undefined);
 
-    const time = coinMarketCapPriceFeed.getHistoricalPrice(mockTime)
+    const time = coinMarketCapPriceFeed.getHistoricalPrice(mockTime);
     assert.equal(time, undefined);
   });
 
   it("Should not call API again if succeeding update() call is within minTimeBetweenUpdates", async function() {
     networker.getJsonReturns = [
-      { data: { DAI: { quote: { PHP: { price: mockPrice } } } } },
-      { data: { DAI: { quote: { PHP: { price: mockPrice + 1 } } } } }
+      { data: { [symbol]: { quote: { [convert]: { price: mockPrice } } } } },
+      { data: { [symbol]: { quote: { [convert]: { price: mockPrice + 1 } } } } }
     ];
 
     await coinMarketCapPriceFeed.update();
@@ -221,12 +221,12 @@ contract("CoinMarketCapPriceFeed.js", function() {
       // we need this last division to convert final result to correct decimals
       // in this case its from 18 decimals to 10 decimals.
       // .div(toBN("10").pow(toBN(18 - 10)))
-      .toString()
+      .toString();
 
-    const price = cmcInvertedPriceFeed.getCurrentPrice()
+    const price = cmcInvertedPriceFeed.getCurrentPrice();
     assert.equal(price.toString(), invertedPrice);
 
-    const historicalPrice = cmcInvertedPriceFeed.getHistoricalPrice(mockTime)
+    const historicalPrice = cmcInvertedPriceFeed.getHistoricalPrice(mockTime);
     assert.equal(historicalPrice.toString(), invertedPrice);
   });
 
@@ -236,17 +236,6 @@ contract("CoinMarketCapPriceFeed.js", function() {
 
     assert.deepStrictEqual(networker.getJsonInputs, [
       `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=${symbol}&convert=${convert}&CMC_PRO_API_KEY=${apiKey}`
-    ]);
-  });
-
-  it("Produces correct url if apiKey is absent", async function() {
-    coinMarketCapPriceFeed.apiKey = undefined;
-    networker.getJsonReturns = [ validResponse ];
-    
-    await coinMarketCapPriceFeed.update();
-
-    assert.deepStrictEqual(networker.getJsonInputs, [
-      `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=${symbol}&convert=${convert}`
     ]);
   });
 
