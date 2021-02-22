@@ -69,6 +69,8 @@ async function run({
       liquidatorOverridePrice
     });
 
+    liquidatorConfig = { contractType: "ExpiringMultiParty", contractVersion: "latest" };
+
     // Load unlocked web3 accounts and get the networkId.
     const [detectedContract, accounts, networkId] = await Promise.all([
       findContractVersion(financialContractAddress, web3),
