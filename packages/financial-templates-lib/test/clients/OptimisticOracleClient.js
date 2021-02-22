@@ -95,7 +95,7 @@ contract("OptimisticOracleClient.js", function(accounts) {
     startTime = (await optimisticOracle.getCurrentTime()).toNumber();
     requestTime = startTime - 10;
 
-    // The ExpiringMultiPartyClient does not emit any info `level` events.  Therefore no need to test Winston outputs.
+    // The FinancialContractClient does not emit any info `level` events.  Therefore no need to test Winston outputs.
     // DummyLogger will not print anything to console as only capture `info` level events.
     dummyLogger = winston.createLogger({
       level: "info",
@@ -138,6 +138,7 @@ contract("OptimisticOracleClient.js", function(accounts) {
       {
         requester: optimisticRequester.address,
         identifier: hexToUtf8(identifier),
+        ancillaryData: "0x",
         timestamp: requestTime.toString(),
         currency: collateral.address,
         reward: "0",
@@ -159,6 +160,8 @@ contract("OptimisticOracleClient.js", function(accounts) {
         requester: optimisticRequester.address,
         proposer: proposer,
         identifier: hexToUtf8(identifier),
+        ancillaryData: "0x",
+        currency: collateral.address,
         timestamp: requestTime.toString(),
         proposedPrice: correctPrice,
         expirationTimestamp: (Number(currentContractTime) + liveness).toString()
@@ -185,11 +188,19 @@ contract("OptimisticOracleClient.js", function(accounts) {
         requester: optimisticRequester.address,
         proposer: proposer,
         identifier: hexToUtf8(identifier),
+        ancillaryData: "0x",
+        currency: collateral.address,
         timestamp: requestTime.toString(),
         proposedPrice: correctPrice,
         expirationTimestamp: (Number(currentContractTime) + liveness).toString()
       }
     ]);
+
+    // Once proposals are settled they no longer appear as settleable in the client.
+    await optimisticOracle.settle(optimisticRequester.address, identifier, requestTime, "0x");
+    await client.update();
+    result = client.getSettleableProposals(proposer);
+    assert.deepStrictEqual(result, []);
   });
 
   it("Basic dispute lifecycle: request, propose, dispute, resolve & settle", async function() {
@@ -235,6 +246,7 @@ contract("OptimisticOracleClient.js", function(accounts) {
         proposer: proposer,
         disputer: disputer,
         identifier: hexToUtf8(identifier),
+        ancillaryData: "0x",
         timestamp: requestTime.toString()
       }
     ]);
@@ -267,6 +279,7 @@ contract("OptimisticOracleClient.js", function(accounts) {
       {
         requester: optimisticRequester.address,
         identifier: hexToUtf8(identifier),
+        ancillaryData: "0x",
         timestamp: requestTime.toString(),
         currency: collateral.address,
         reward: "0",

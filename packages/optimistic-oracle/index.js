@@ -4,6 +4,7 @@ require("dotenv").config();
 const retry = require("async-retry");
 
 const { Logger, waitForLogger, delay, OptimisticOracleClient, GasEstimator } = require("@uma/financial-templates-lib");
+const { OptimisticOracleProposer } = require("./src/proposer");
 
 // Contract ABIs and network Addresses.
 const { getAbi, getAddress } = require("@uma/core");
@@ -17,32 +18,39 @@ const { getWeb3 } = require("@uma/common");
  *     mode which will exit after the loop.
  * @param {Number} errorRetries The number of times the execution loop will re-try before throwing if an error occurs.
  * @param {Number} errorRetriesTimeout The amount of milliseconds to wait between re-try iterations on failed loops.
+ * @param {Object} [commonPriceFeedConfig] Common configuration to pass to all PriceFeeds constructed by proposer.
+ * @param {Object} [optimisticOracleProposerConfig] Configuration to construct the OptimisticOracle proposer.
  * @return None or throws an Error.
  */
-async function run({ logger, web3, pollingDelay, errorRetries, errorRetriesTimeout }) {
+async function run({
+  logger,
+  web3,
+  pollingDelay,
+  errorRetries,
+  errorRetriesTimeout,
+  commonPriceFeedConfig,
+  optimisticOracleProposerConfig
+}) {
   try {
-    const [networkId] = await Promise.all([web3.eth.net.getId()]);
+    const [networkId, accounts] = await Promise.all([web3.eth.net.getId(), web3.eth.getAccounts()]);
     const optimisticOracleAddress = getAddress("OptimisticOracle", networkId);
     const votingAddress = getAddress("Voting", networkId);
     // If pollingDelay === 0 then the bot is running in serverless mode and should send a `debug` level log.
     // Else, if running in loop mode (pollingDelay != 0), then it should send a `info` level log.
     logger[pollingDelay === 0 ? "debug" : "info"]({
       at: "OptimisticOracle#index",
-      message: "OO keeper started 🌊",
+      message: "OptimisticOracle proposer started 🌊",
       optimisticOracleAddress,
       pollingDelay,
       errorRetries,
-      errorRetriesTimeout
+      errorRetriesTimeout,
+      commonPriceFeedConfig,
+      optimisticOracleProposerConfig
     });
 
-    // TODO:
-    // - Miscellaneous setup
-    // - Construct OO Keeper bot
-    // - Set appropriate allowances
-
     // Create the OptimisticOracleClient to query on-chain information, GasEstimator to get latest gas prices and an
-    // instance of the OO Keeper to respond to price requests and proposals.
-    const ooClient = new OptimisticOracleClient(
+    // instance of the OO Proposer to respond to price requests and proposals.
+    const optimisticOracleClient = new OptimisticOracleClient(
       logger,
       getAbi("OptimisticOracle"),
       getAbi("Voting"),
@@ -52,13 +60,27 @@ async function run({ logger, web3, pollingDelay, errorRetries, errorRetriesTimeo
     );
     const gasEstimator = new GasEstimator(logger);
 
+    // Construct default price feed config passed to all pricefeeds constructed by the proposer.
+    // The proposer needs to query prices for any identifier approved to use the Optimistic Oracle,
+    // so a new pricefeed is constructed for each identifier. This `commonPriceFeedConfig` contains
+    // properties that are shared across all of these new pricefeeds.
+    const optimisticOracleProposer = new OptimisticOracleProposer({
+      logger,
+      optimisticOracleClient,
+      gasEstimator,
+      account: accounts[0],
+      commonPriceFeedConfig,
+      optimisticOracleProposerConfig
+    });
+
     // Create a execution loop that will run indefinitely (or yield early if in serverless mode)
     for (;;) {
       await retry(
         async () => {
-          await gasEstimator.update();
-          // Placeholder for looping logic that should be implemented in this bot in future PR's.
-          await ooClient.update();
+          await optimisticOracleProposer.update();
+          await optimisticOracleProposer.sendProposals();
+          await optimisticOracleProposer.sendDisputes();
+          await optimisticOracleProposer.settleRequests();
           return;
         },
         {
@@ -106,14 +128,27 @@ async function Poll(callback) {
       // Default to 3 re-tries on error within the execution loop.
       errorRetries: process.env.ERROR_RETRIES ? Number(process.env.ERROR_RETRIES) : 5,
       // Default to 10 seconds in between error re-tries.
-      errorRetriesTimeout: process.env.ERROR_RETRIES_TIMEOUT ? Number(process.env.ERROR_RETRIES_TIMEOUT) : 10
+      errorRetriesTimeout: process.env.ERROR_RETRIES_TIMEOUT ? Number(process.env.ERROR_RETRIES_TIMEOUT) : 10,
+      // Common price feed configuration passed along to all those constructed by proposer.
+      commonPriceFeedConfig: process.env.COMMON_PRICE_FEED_CONFIG
+        ? JSON.parse(process.env.COMMON_PRICE_FEED_CONFIG)
+        : { lookback: 7200 },
+      // If there is an optimistic oracle config, add it. Else, set to null. Example config:
+      // {
+      //   "disputePriceErrorPercent":0.05 -> Proposal prices that do not equal the dispute price
+      //                                      within this error % will be disputed.
+      //                                      e.g. 0.05 implies 5% margin of error.
+      //  }
+      optimisticOracleProposerConfig: process.env.OPTIMISTIC_ORACLE_PROPOSER_CONFIG
+        ? JSON.parse(process.env.OPTIMISTIC_ORACLE_PROPOSER_CONFIG)
+        : {}
     };
 
     await run({ logger: Logger, web3: getWeb3(), ...executionParameters });
   } catch (error) {
     Logger.error({
       at: "OptimisticOracle#index",
-      message: "OO keeper execution error🚨",
+      message: "OO proposer execution error🚨",
       error: typeof error === "string" ? new Error(error) : error
     });
     await waitForLogger(Logger);

@@ -1,5 +1,6 @@
 node_modules
 build
+dist
 bridge.log
 package-lock.json
 .coverage_contracts
@@ -14,6 +15,8 @@ ui
 .DS_Store
 antora.yml
 .eslintcache
+.idea
+
 
 # GAE deployment files and directories for GAE deployments.
 app.yaml

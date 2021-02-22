@@ -1,12 +1,6 @@
 const { PriceFeedInterface } = require("./PriceFeedInterface");
 const { toBN } = require("web3").utils;
-
-// An implementation of PriceFeedInterface that medianizes other price feeds.
 class PriceFeedMock extends PriceFeedInterface {
-  // Constructs the MedianizerPriceFeed.
-  // priceFeeds a list of priceFeeds to medianize. All elements must be of type PriceFeedInterface. Must be an array of
-  // at least one element. Note that no decimals are included in this price feed. It simply stores the exact input number
-  // provided by the test suite. Therefore, decimal conversion is expected to occur within the tests themselves.
   constructor(currentPrice, historicalPrice, lastUpdateTime, priceFeedDecimals = 18, lookback = 3600) {
     super();
     this.updateCalled = 0;
@@ -16,6 +10,7 @@ class PriceFeedMock extends PriceFeedInterface {
     this.priceFeedDecimals = priceFeedDecimals;
     this.historicalPrices = [];
     this.lookback = lookback;
+    this.uuid = "PriceFeedMock";
   }
 
   setCurrentPrice(currentPrice) {
@@ -23,7 +18,7 @@ class PriceFeedMock extends PriceFeedInterface {
     this.currentPrice = currentPrice ? toBN(currentPrice) : currentPrice;
   }
 
-  // Store an array of historical prices [{timestamp, price}] so that getHistoricalPrice can return
+  // Store an array of historical prices [{timestamp, price}] so that await  getHistoricalPrice can return
   // a price for a specific timestamp if found in this array.
   setHistoricalPrices(historicalPrices) {
     historicalPrices.forEach(_price => {
@@ -36,7 +31,7 @@ class PriceFeedMock extends PriceFeedInterface {
   }
 
   setHistoricalPrice(historicalPrice) {
-    this.historicalPrice = historicalPrice;
+    this.historicalPrice = historicalPrice ? toBN(historicalPrice) : historicalPrice;
   }
 
   setLastUpdateTime(lastUpdateTime) {
@@ -51,13 +46,20 @@ class PriceFeedMock extends PriceFeedInterface {
     return this.currentPrice;
   }
 
-  getHistoricalPrice(time) {
-    // If a price for `time` was set via `setHistoricalPrices`, then return that price, otherwise return the mocked
-    // historical price.
-    if (time in this.historicalPrices) {
-      return this.historicalPrices[time];
+  async getHistoricalPrice(time) {
+    // To implement the PriceFeedInterface properly, this method must either return a valid price
+    // or throw.
+    if (!this.historicalPrice && !(time in this.historicalPrices)) {
+      throw new Error("PriceFeedMock expected error thrown");
+    } else {
+      // If a price for `time` was set via `setHistoricalPrices`, then return that price, otherwise return the mocked
+      // historical price.
+      if (time in this.historicalPrices) {
+        return this.historicalPrices[time];
+      } else {
+        return this.historicalPrice;
+      }
     }
-    return this.historicalPrice;
   }
 
   getLastUpdateTime() {

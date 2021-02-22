@@ -66,19 +66,11 @@ class OptimisticOracleClient {
     });
   }
 
-  // Returns disputes that can be settled and that involved the caler as the disputer
+  // Returns disputes that can be settled and that involved the caller as the disputer
   getSettleableDisputes(caller) {
     return this.settleableDisputes.filter(event => {
       return event.disputer === caller;
     });
-  }
-
-  // Returns an array of Price Request objects for each position that someone has proposed a price for and whose
-  // proposal can be disputed. The proposal can be disputed because the proposed price deviates from the `inputPrice` by
-  // more than the `errorThreshold`.
-  getDisputablePriceProposals() {
-    // TODO
-    return;
   }
 
   // Returns the last update timestamp.
@@ -117,6 +109,7 @@ class OptimisticOracleClient {
       return {
         requester: event.returnValues.requester,
         identifier: this.hexToUtf8(event.returnValues.identifier),
+        ancillaryData: event.returnValues.ancillaryData ? event.returnValues.ancillaryData : "0x",
         timestamp: event.returnValues.timestamp,
         currency: event.returnValues.currency,
         reward: event.returnValues.reward,
@@ -124,30 +117,45 @@ class OptimisticOracleClient {
       };
     });
 
-    // Store proposals that have NOT been disputed:
-    let undisputedProposals = proposalEvents
-      .filter(event => {
-        const key = this._getPriceRequestKey(event);
-        const hasDispute = disputeEvents.find(disputeEvent => this._getPriceRequestKey(disputeEvent) === key);
-        return hasDispute === undefined;
+    // Store proposals that have NOT been disputed and have NOT been settled, and reformat data.
+    const undisputedProposals = proposalEvents.filter(event => {
+      const key = this._getPriceRequestKey(event);
+      const hasDispute = disputeEvents.find(disputeEvent => this._getPriceRequestKey(disputeEvent) === key);
+      return hasDispute === undefined;
+    });
+    const unsettledProposals = await Promise.all(
+      undisputedProposals.map(async event => {
+        const state = await this.oracle.methods
+          .getState(
+            event.returnValues.requester,
+            event.returnValues.identifier,
+            event.returnValues.timestamp,
+            event.returnValues.ancillaryData ? event.returnValues.ancillaryData : "0x"
+          )
+          .call();
+
+        // For unsettled proposals, reformat the data:
+        if (state !== OptimisticOracleRequestStatesEnum.SETTLED) {
+          return {
+            requester: event.returnValues.requester,
+            proposer: event.returnValues.proposer,
+            identifier: this.hexToUtf8(event.returnValues.identifier),
+            ancillaryData: event.returnValues.ancillaryData ? event.returnValues.ancillaryData : "0x",
+            timestamp: event.returnValues.timestamp,
+            proposedPrice: event.returnValues.proposedPrice,
+            expirationTimestamp: event.returnValues.expirationTimestamp,
+            currency: event.returnValues.currency
+          };
+        }
       })
-      .map(event => {
-        return {
-          requester: event.returnValues.requester,
-          proposer: event.returnValues.proposer,
-          identifier: this.hexToUtf8(event.returnValues.identifier),
-          timestamp: event.returnValues.timestamp,
-          proposedPrice: event.returnValues.proposedPrice,
-          expirationTimestamp: event.returnValues.expirationTimestamp
-        };
-      });
+    ).filter(event => event !== undefined);
 
     // Filter proposals based on their expiration timestamp:
     const isExpired = proposal => {
       return Number(proposal.expirationTimestamp) <= Number(currentTime);
     };
-    this.expiredProposals = undisputedProposals.filter(proposal => isExpired(proposal));
-    this.undisputedProposals = undisputedProposals.filter(proposal => !isExpired(proposal));
+    this.expiredProposals = unsettledProposals.filter(proposal => isExpired(proposal));
+    this.undisputedProposals = unsettledProposals.filter(proposal => !isExpired(proposal));
 
     // Store disputes that were resolved and can be settled:
     let resolvedDisputeEvents = await Promise.all(
@@ -200,6 +208,7 @@ class OptimisticOracleClient {
             proposer: event.returnValues.proposer,
             disputer: event.returnValues.disputer,
             identifier: this.hexToUtf8(event.returnValues.identifier),
+            ancillaryData: event.returnValues.ancillaryData ? event.returnValues.ancillaryData : "0x",
             timestamp: event.returnValues.timestamp
           };
         }
@@ -207,10 +216,7 @@ class OptimisticOracleClient {
     ).filter(event => event !== undefined);
     this.settleableDisputes = unsettledResolvedDisputeEvents;
 
-    // Determine which undisputed proposals SHOULD be disputed based on current prices:
-    // TODO: This would involve having a pricefeed for each identifier. This logic might be
-    // better placed in the OO Keeper instead of the client.
-
+    // Update timestamp and end update.
     this.lastUpdateTimestamp = currentTime;
     this.logger.debug({
       at: "OptimisticOracleClient",

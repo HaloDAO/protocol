@@ -5,13 +5,13 @@ const retry = require("async-retry");
 
 // Clients to retrieve on-chain data and helpers.
 const {
-  ExpiringMultiPartyClient,
-  ExpiringMultiPartyEventClient,
+  FinancialContractClient,
+  FinancialContractEventClient,
   TokenBalanceClient,
   Networker,
   Logger,
-  createReferencePriceFeedForEmp,
-  createTokenPriceFeedForEmp,
+  createReferencePriceFeedForFinancialContract,
+  createTokenPriceFeedForFinancialContract,
   waitForLogger,
   delay
 } = require("@uma/financial-templates-lib");
@@ -24,18 +24,18 @@ const { SyntheticPegMonitor } = require("./src/SyntheticPegMonitor");
 
 // Contract ABIs and network Addresses.
 const { getAbi, getAddress } = require("@uma/core");
-const { getWeb3 } = require("@uma/common");
+const { getWeb3, findContractVersion, SUPPORTED_CONTRACT_VERSIONS } = require("@uma/common");
 
 /**
  * @notice Continuously attempts to monitor contract positions and reports based on monitor modules.
  * @param {Object} logger Module responsible for sending logs.
- * @param {String} address Contract address of the EMP.
+ * @param {String} address Contract address of the Financial Contract.
  * @param {Number} pollingDelay The amount of seconds to wait between iterations. If set to 0 then running in serverless
  *     mode which will exit after the loop.
  * @param {Number} errorRetries The number of times the execution loop will re-try before throwing if an error occurs.
  * @param {Number} errorRetriesTimeout The amount of milliseconds to wait between re-try iterations on failed loops.
  * @param {Number} startingBlock Offset block number to define where the monitor bot should start searching for events
- *     from. If 0 will look for all events back to deployment of the EMP. If set to null uses current block number.
+ *     from. If 0 will look for all events back to deployment of the Financial Contract. If set to null uses current block number.
  * @param {Number} endingBlock Termination block number to define where the monitor bot should end searching for events.
  *     If `null` then will search up until the latest block number in each loop.
  * @param {Object} monitorConfig Configuration object to parameterize all monitor modules.
@@ -47,7 +47,7 @@ const { getWeb3 } = require("@uma/common");
 async function run({
   logger,
   web3,
-  empAddress,
+  financialContractAddress,
   pollingDelay,
   errorRetries,
   errorRetriesTimeout,
@@ -66,7 +66,7 @@ async function run({
     logger[pollingDelay === 0 ? "debug" : "info"]({
       at: "Monitor#index",
       message: "Monitor started 🕵️‍♂️",
-      empAddress,
+      financialContractAddress,
       pollingDelay,
       errorRetries,
       errorRetriesTimeout,
@@ -80,30 +80,57 @@ async function run({
 
     const getTime = () => Math.round(new Date().getTime() / 1000);
 
+    const [detectedContract, networkId, latestBlock] = await Promise.all([
+      findContractVersion(financialContractAddress, web3),
+      web3.eth.net.getId(),
+      web3.eth.getBlock("latest")
+    ]);
+
+    // Append the contract version and type to the monitorConfig, if the monitorConfig does not already contain one.
+    if (!monitorConfig) monitorConfig = {};
+    if (!monitorConfig.contractVersion) monitorConfig.contractVersion = detectedContract.contractVersion;
+    if (!monitorConfig.contractType) monitorConfig.contractType = detectedContract.contractType;
+
+    // Check that the version and type is supported. Note if either is null this check will also catch it.
+    if (
+      SUPPORTED_CONTRACT_VERSIONS.filter(
+        vo => vo.contractType == monitorConfig.contractType && vo.contractVersion == monitorConfig.contractVersion
+      ).length == 0
+    )
+      throw new Error(
+        `Contract version specified or inferred is not supported by this bot. Provided/inferred config: ${JSON.stringify(
+          monitorConfig
+        )}. is not part of ${JSON.stringify(SUPPORTED_CONTRACT_VERSIONS)}`
+      );
+    // Setup contract instances.
+    const voting = new web3.eth.Contract(getAbi("Voting", "1.2.2"), getAddress("Voting", networkId));
+    const financialContract = new web3.eth.Contract(
+      getAbi(monitorConfig.contractType, monitorConfig.contractVersion),
+      financialContractAddress
+    );
+
     const networker = new Networker(logger);
 
     // We want to enforce that all pricefeeds return prices in the same precision, so we'll construct one price feed
     // initially and grab its precision to pass into the other price feeds:
-    const medianizerPriceFeed = await createReferencePriceFeedForEmp(
+    const medianizerPriceFeed = await createReferencePriceFeedForFinancialContract(
       logger,
       web3,
       networker,
       getTime,
-      empAddress,
+      financialContractAddress,
       medianizerPriceFeedConfig
     );
     const priceFeedDecimals = medianizerPriceFeed.getPriceFeedDecimals();
 
-    // 0. Setup EMP and token instances to monitor.
-    const [networkId, latestBlock, tokenPriceFeed, denominatorPriceFeed] = await Promise.all([
-      web3.eth.net.getId(),
-      web3.eth.getBlock("latest"),
-      createTokenPriceFeedForEmp(logger, web3, networker, getTime, empAddress, {
+    // 0. Setup Financial Contract and token instances to monitor.
+    const [tokenPriceFeed, denominatorPriceFeed] = await Promise.all([
+      createTokenPriceFeedForFinancialContract(logger, web3, networker, getTime, financialContractAddress, {
         ...tokenPriceFeedConfig,
         priceFeedDecimals
       }),
       denominatorPriceFeedConfig &&
-        createReferencePriceFeedForEmp(logger, web3, networker, getTime, empAddress, {
+        createReferencePriceFeedForFinancialContract(logger, web3, networker, getTime, financialContractAddress, {
           ...denominatorPriceFeedConfig,
           priceFeedDecimals
         })
@@ -123,14 +150,10 @@ async function run({
       throw new Error("Price feed config is invalid");
     }
 
-    // Setup contract instances.
-    const emp = new web3.eth.Contract(getAbi("ExpiringMultiParty"), empAddress);
-    const voting = new web3.eth.Contract(getAbi("Voting"), getAddress("Voting", networkId));
-
     const [priceIdentifier, collateralTokenAddress, syntheticTokenAddress] = await Promise.all([
-      emp.methods.priceIdentifier().call(),
-      emp.methods.collateralCurrency().call(),
-      emp.methods.tokenCurrency().call()
+      financialContract.methods.priceIdentifier().call(),
+      financialContract.methods.collateralCurrency().call(),
+      financialContract.methods.tokenCurrency().call()
     ]);
     const collateralToken = new web3.eth.Contract(getAbi("ExpandedERC20"), collateralTokenAddress);
     const syntheticToken = new web3.eth.Contract(getAbi("ExpandedERC20"), syntheticTokenAddress);
@@ -141,8 +164,8 @@ async function run({
       collateralToken.methods.decimals().call(),
       syntheticToken.methods.decimals().call()
     ]);
-    // Generate EMP properties to inform monitor modules of important info like token symbols and price identifier.
-    const empProps = {
+    // Generate Financial Contract properties to inform monitor modules of important info like token symbols and price identifier.
+    const financialContractProps = {
       collateralSymbol,
       syntheticSymbol,
       collateralDecimals: Number(collateralDecimals),
@@ -159,21 +182,22 @@ async function run({
     // loop and update this variable accordingly on each iteration.
     const eventsFromBlockNumber = startingBlock ? startingBlock : latestBlock.number;
 
-    const empEventClient = new ExpiringMultiPartyEventClient(
+    const financialContractEventClient = new FinancialContractEventClient(
       logger,
-      getAbi("ExpiringMultiParty"),
+      getAbi(monitorConfig.contractType, monitorConfig.contractVersion),
       web3,
-      empAddress,
+      financialContractAddress,
       eventsFromBlockNumber,
-      endingBlock
+      endingBlock,
+      monitorConfig.contractType
     );
 
     const contractMonitor = new ContractMonitor({
       logger,
-      expiringMultiPartyEventClient: empEventClient,
+      financialContractEventClient,
       priceFeed: medianizerPriceFeed,
       monitorConfig,
-      empProps,
+      financialContractProps,
       voting
     });
 
@@ -190,18 +214,27 @@ async function run({
       logger,
       tokenBalanceClient,
       monitorConfig,
-      empProps
+      financialContractProps
     });
 
     // 3. Collateralization Ratio monitor.
-    const empClient = new ExpiringMultiPartyClient(logger, getAbi("ExpiringMultiParty"), web3, empAddress);
+    const financialContractClient = new FinancialContractClient(
+      logger,
+      getAbi(monitorConfig.contractType, monitorConfig.contractVersion),
+      web3,
+      financialContractAddress,
+      collateralDecimals,
+      syntheticDecimals,
+      medianizerPriceFeed.getPriceFeedDecimals(),
+      monitorConfig.contractType
+    );
 
     const crMonitor = new CRMonitor({
       logger,
-      expiringMultiPartyClient: empClient,
+      financialContractClient,
       priceFeed: medianizerPriceFeed,
       monitorConfig,
-      empProps
+      financialContractProps
     });
 
     // 4. Synthetic Peg Monitor.
@@ -212,7 +245,7 @@ async function run({
       medianizerPriceFeed,
       denominatorPriceFeed,
       monitorConfig,
-      empProps
+      financialContractProps
     });
 
     logger.debug({
@@ -222,7 +255,8 @@ async function run({
       syntheticDecimals: Number(syntheticDecimals),
       priceFeedDecimals: Number(medianizerPriceFeed.getPriceFeedDecimals()),
       tokenPriceFeedConfig,
-      medianizerPriceFeedConfig
+      medianizerPriceFeedConfig,
+      monitorConfig
     });
     // Create a execution loop that will run indefinitely (or yield early if in serverless mode)
     for (;;) {
@@ -230,8 +264,8 @@ async function run({
         async () => {
           // Update all client and price feeds.
           await Promise.all([
-            empClient.update(),
-            empEventClient.update(),
+            financialContractClient.update(),
+            financialContractEventClient.update(),
             tokenBalanceClient.update(),
             medianizerPriceFeed.update(),
             tokenPriceFeed.update(),
@@ -274,6 +308,7 @@ async function run({
           message: "End of serverless execution loop - terminating process"
         });
         await waitForLogger(logger);
+        await delay(2); // waitForLogger does not always work 100% correctly in serverless. add a delay to ensure logs are captured upstream.
         break;
       }
       logger.debug({
@@ -289,9 +324,9 @@ async function run({
 }
 async function Poll(callback) {
   try {
-    if (!process.env.EMP_ADDRESS) {
+    if (!process.env.EMP_ADDRESS && !process.env.FINANCIAL_CONTRACT_ADDRESS) {
       throw new Error(
-        "Bad environment variables! Specify an `EMP_ADDRESS` for the location of the expiring Multi Party."
+        "Bad environment variables! Specify an EMP_ADDRESS or FINANCIAL_CONTRACT_ADDRESS for the location of the financial contract the bot is expected to interact with."
       );
     }
 
@@ -303,13 +338,13 @@ async function Poll(callback) {
     // This object is spread when calling the `run` function below. It relies on the object enumeration order and must
     // match the order of parameters defined in the`run` function.
     const executionParameters = {
-      empAddress: process.env.EMP_ADDRESS,
+      financialContractAddress: process.env.EMP_ADDRESS || process.env.FINANCIAL_CONTRACT_ADDRESS,
       // Default to 1 minute delay. If set to 0 in env variables then the script will exit after full execution.
       pollingDelay: process.env.POLLING_DELAY ? Number(process.env.POLLING_DELAY) : 60,
-      // Default to 5 re-tries on error within the execution loop.
-      errorRetries: process.env.ERROR_RETRIES ? Number(process.env.ERROR_RETRIES) : 5,
-      // Default to 10 seconds in between error re-tries.
-      errorRetriesTimeout: process.env.ERROR_RETRIES__TIMEOUT ? Number(process.env.ERROR_RETRIES__TIMEOUT) : 10,
+      // Default to 3 re-tries on error within the execution loop.
+      errorRetries: process.env.ERROR_RETRIES ? Number(process.env.ERROR_RETRIES) : 3,
+      // Default to 1 seconds in between error re-tries.
+      errorRetriesTimeout: process.env.ERROR_RETRIES_TIMEOUT ? Number(process.env.ERROR_RETRIES_TIMEOUT) : 1,
       // Block number to search for events from. If set, acts to offset the search to ignore events in the past. If not
       // set then default to null which indicates that the bot should start at the current block number.
       startingBlock: process.env.STARTING_BLOCK_NUMBER,
@@ -343,7 +378,7 @@ async function Poll(callback) {
       //       "newPositionCreated":"debug"                  // ContractMonitor new position created.
       //   }
       // }
-      monitorConfig: process.env.MONITOR_CONFIG ? JSON.parse(process.env.MONITOR_CONFIG) : null,
+      monitorConfig: process.env.MONITOR_CONFIG ? JSON.parse(process.env.MONITOR_CONFIG) : {},
       // Read price feed configuration from an environment variable. Uniswap price feed contains information about the
       // uniswap market. EG: {"type":"uniswap","twapLength":2,"lookback":7200,"invertPrice":true "uniswapAddress":"0x1234"}
       // Requires the address of the balancer pool where price is available.

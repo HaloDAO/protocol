@@ -17,9 +17,9 @@ const Store = getTruffleContract("Store", web3, CONTRACT_VERSION);
 
 const {
   createPriceFeed,
-  createReferencePriceFeedForEmp,
-  createUniswapPriceFeedForEmp,
-  createTokenPriceFeedForEmp
+  createReferencePriceFeedForFinancialContract,
+  createUniswapPriceFeedForFinancialContract,
+  createTokenPriceFeedForFinancialContract
 } = require("../../src/price-feed/CreatePriceFeed");
 const { CryptoWatchPriceFeed } = require("../../src/price-feed/CryptoWatchPriceFeed");
 const { UniswapPriceFeed } = require("../../src/price-feed/UniswapPriceFeed");
@@ -29,7 +29,9 @@ const { MedianizerPriceFeed } = require("../../src/price-feed/MedianizerPriceFee
 const { CoinMarketCapPriceFeed } = require("../../src/price-feed/CoinMarketCapPriceFeed");
 const { CoinGeckoPriceFeed } = require("../../src/price-feed/CoinGeckoPriceFeed");
 const { NetworkerMock } = require("../../src/price-feed/NetworkerMock");
+const { SpyTransport } = require("../../src/logger/SpyTransport");
 const winston = require("winston");
+const sinon = require("sinon");
 
 const { ZERO_ADDRESS, interfaceName } = require("@uma/common");
 
@@ -43,6 +45,7 @@ contract("CreatePriceFeed.js", function(accounts) {
   let timer;
   let finder;
   let identifierWhitelist;
+  let spy;
 
   const apiKey = "test-api-key";
   const exchange = "test-exchange";
@@ -54,9 +57,8 @@ contract("CreatePriceFeed.js", function(accounts) {
   const uniswapAddress = toChecksumAddress(randomHex(20));
   const balancerAddress = toChecksumAddress(randomHex(20));
   const symbol = "test-symbol";
-  const convert = "test-convert";
+  const quoteCurrency = "test-quoteCurrency";
   const contractAddress = "test-address";
-  const currency = "test-currency";
 
   before(async function() {
     identifierWhitelist = await IdentifierWhitelist.new();
@@ -69,8 +71,11 @@ contract("CreatePriceFeed.js", function(accounts) {
 
   beforeEach(async function() {
     networker = new NetworkerMock();
+    spy = sinon.spy();
+
     logger = winston.createLogger({
-      silent: true
+      level: "info",
+      transports: [new SpyTransport({ level: "error" }, { spy: spy })]
     });
   });
 
@@ -446,7 +451,7 @@ contract("CreatePriceFeed.js", function(accounts) {
       financialProductLibraryAddress: ZERO_ADDRESS
     };
 
-    const emp = await ExpiringMultiParty.new(constructorParams);
+    const financialContract = await ExpiringMultiParty.new(constructorParams);
 
     const getIdBackup = web3.eth.net.getId;
 
@@ -454,7 +459,14 @@ contract("CreatePriceFeed.js", function(accounts) {
     web3.eth.net.getId = async () => 1;
 
     const twapLength = 100;
-    const priceFeed = await createUniswapPriceFeedForEmp(logger, web3, networker, getTime, emp.address, { twapLength });
+    const priceFeed = await createUniswapPriceFeedForFinancialContract(
+      logger,
+      web3,
+      networker,
+      getTime,
+      financialContract.address,
+      { twapLength }
+    );
 
     // Cannot test for the uniswap address since that depends on the synthetic token address, which is generated in a non-hermetic way.
     // Price should always be inverted since the collateralTokenAddress is 0x1.
@@ -489,13 +501,13 @@ contract("CreatePriceFeed.js", function(accounts) {
       financialProductLibraryAddress: ZERO_ADDRESS
     };
 
-    const emp = await ExpiringMultiParty.new(constructorParams);
+    const financialContract = await ExpiringMultiParty.new(constructorParams);
 
     let didThrow = false;
     try {
       // Creation should fail because this test network has no deployed uniswap contract and UNISWAP_ADDRESS isn't
       // provided in the environment.
-      await createUniswapPriceFeedForEmp(logger, web3, networker, getTime, emp.address);
+      await createUniswapPriceFeedForFinancialContract(logger, web3, networker, getTime, financialContract.address);
     } catch (error) {
       didThrow = true;
     }
@@ -555,9 +567,16 @@ contract("CreatePriceFeed.js", function(accounts) {
       financialProductLibraryAddress: ZERO_ADDRESS
     };
 
-    const emp = await ExpiringMultiParty.new(constructorParams);
+    const financialContract = await ExpiringMultiParty.new(constructorParams);
 
-    const balancerFeed = await createTokenPriceFeedForEmp(logger, web3, networker, getTime, emp.address, config);
+    const balancerFeed = await createTokenPriceFeedForFinancialContract(
+      logger,
+      web3,
+      networker,
+      getTime,
+      financialContract.address,
+      config
+    );
     assert.isTrue(balancerFeed instanceof BalancerPriceFeed);
   });
 
@@ -590,9 +609,16 @@ contract("CreatePriceFeed.js", function(accounts) {
       financialProductLibraryAddress: ZERO_ADDRESS
     };
 
-    const emp = await ExpiringMultiParty.new(constructorParams);
+    const financialContract = await ExpiringMultiParty.new(constructorParams);
 
-    const uniswapFeed = await createTokenPriceFeedForEmp(logger, web3, networker, getTime, emp.address, config);
+    const uniswapFeed = await createTokenPriceFeedForFinancialContract(
+      logger,
+      web3,
+      networker,
+      getTime,
+      financialContract.address,
+      config
+    );
     assert.isTrue(uniswapFeed instanceof UniswapPriceFeed);
   });
 
@@ -618,12 +644,25 @@ contract("CreatePriceFeed.js", function(accounts) {
       financialProductLibraryAddress: ZERO_ADDRESS
     };
 
-    const emp = await ExpiringMultiParty.new(constructorParams);
+    const financialContract = await ExpiringMultiParty.new(constructorParams);
 
     // If `config` is undefined or ommitted (and set to its default value), this should return a Medianizer Price Feed
-    let medianizerFeed = await createTokenPriceFeedForEmp(logger, web3, networker, getTime, emp.address);
+    let medianizerFeed = await createTokenPriceFeedForFinancialContract(
+      logger,
+      web3,
+      networker,
+      getTime,
+      financialContract.address
+    );
     assert.isTrue(medianizerFeed instanceof MedianizerPriceFeed);
-    medianizerFeed = await createTokenPriceFeedForEmp(logger, web3, networker, getTime, emp.address, undefined);
+    medianizerFeed = await createTokenPriceFeedForFinancialContract(
+      logger,
+      web3,
+      networker,
+      getTime,
+      financialContract.address,
+      undefined
+    );
     assert.isTrue(medianizerFeed instanceof MedianizerPriceFeed);
   });
 
@@ -719,6 +758,239 @@ contract("CreatePriceFeed.js", function(accounts) {
     assert.equal(medianizerFeed, null);
   });
 
+  it("ExpressionPriceFeed: invalid config, no expression", async function() {
+    const config = {
+      type: "expression"
+    };
+
+    const expressionPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNull(expressionPriceFeed);
+    assert.equal(spy.callCount, 1); // 1 error.
+  });
+
+  it("ExpressionPriceFeed: invalid config, symbol not found", async function() {
+    const config = {
+      type: "expression",
+      expression: "mysymbol * 2"
+    };
+
+    const expressionPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNull(expressionPriceFeed);
+    assert.equal(spy.callCount, 1); // 1 error.
+  });
+
+  it("ExpressionPriceFeed: customFeeds", async function() {
+    const config = {
+      type: "expression",
+      expression: "mysymbol * 2",
+      customFeeds: {
+        mysymbol: {
+          type: "cryptowatch",
+          apiKey,
+          exchange,
+          pair,
+          lookback,
+          minTimeBetweenUpdates
+        }
+      }
+    };
+
+    const expressionPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNotNull(expressionPriceFeed);
+    assert.exists(expressionPriceFeed.priceFeedMap["mysymbol"]);
+  });
+
+  it("ExpressionPriceFeed: inherited config", async function() {
+    const config = {
+      type: "expression",
+      expression: "mysymbol * 2",
+      apiKey,
+      exchange,
+      pair,
+      lookback,
+      minTimeBetweenUpdates,
+      customFeeds: {
+        mysymbol: {
+          type: "cryptowatch"
+        }
+      }
+    };
+
+    const expressionPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNotNull(expressionPriceFeed);
+    assert.exists(expressionPriceFeed.priceFeedMap["mysymbol"]);
+    assert.equal(expressionPriceFeed.priceFeedMap["mysymbol"].lookback, lookback);
+  });
+
+  it("ExpressionPriceFeed: invalid config, no expression", async function() {
+    const config = {
+      type: "expression"
+    };
+
+    const expressionPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNull(expressionPriceFeed);
+  });
+
+  it("ExpressionPriceFeed: can find default price feeds", async function() {
+    const config = {
+      type: "expression",
+      lookback,
+      expression: "USDETH + ETH\\/BTC"
+    };
+
+    const expressionPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNotNull(expressionPriceFeed);
+  });
+
+  it("ExpressionPriceFeed: invalid config in customFeeds is ignored if unused", async function() {
+    const config = {
+      type: "expression",
+      expression: "2 + 5",
+      customFeeds: {
+        ETHBTC: {} // Invalid because it has no type.
+      }
+    };
+
+    const expressionPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNotNull(expressionPriceFeed);
+  });
+
+  it("ExpressionPriceFeed: constant expression", async function() {
+    const config = {
+      type: "expression",
+      expression: "1 + 2"
+    };
+
+    const expressionPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNotNull(expressionPriceFeed);
+  });
+
+  it("VaultPriceFeed: valid config", async function() {
+    const config = {
+      type: "vault",
+      address: web3.utils.randomHex(20)
+    };
+
+    const vaultPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNotNull(vaultPriceFeed);
+  });
+
+  it("VaultPriceFeed: invalid config", async function() {
+    const config = {
+      type: "vault"
+    };
+
+    const vaultPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNull(vaultPriceFeed);
+    assert.equal(spy.callCount, 1); // 1 error.
+  });
+
+  it("VaultPriceFeed: shared BlockFinder", async function() {
+    const config = {
+      type: "vault",
+      address: web3.utils.randomHex(20)
+    };
+
+    const vaultPriceFeed1 = await createPriceFeed(logger, web3, networker, getTime, config);
+    const vaultPriceFeed2 = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.strictEqual(vaultPriceFeed2.blockFinder, vaultPriceFeed1.blockFinder);
+  });
+
+  it("VaultPriceFeed: optional parameters", async function() {
+    const address = web3.utils.randomHex(20);
+    const config = {
+      type: "vault",
+      address,
+      priceFeedDecimals: 6,
+      minTimeBetweenUpdates: 100
+    };
+
+    const vaultPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.equal(vaultPriceFeed.minTimeBetweenUpdates, 100);
+    assert.equal(vaultPriceFeed.priceFeedDecimals, 6);
+    assert.equal(vaultPriceFeed.vault.options.address, web3.utils.toChecksumAddress(address));
+  });
+
+  it("LPPriceFeed: valid config", async function() {
+    const config = {
+      type: "lp",
+      poolAddress: web3.utils.randomHex(20),
+      tokenAddress: web3.utils.randomHex(20)
+    };
+
+    const lpPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNotNull(lpPriceFeed);
+  });
+
+  it("LPPriceFeed: invalid config, no token address", async function() {
+    let config = {
+      type: "lp",
+      poolAddress: web3.utils.randomHex(20)
+    };
+
+    const lpPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNull(lpPriceFeed);
+    assert.equal(spy.callCount, 1); // 1 error.
+  });
+
+  it("LPPriceFeed: invalid config, no pool address", async function() {
+    let config = {
+      type: "lp",
+      tokenAddress: web3.utils.randomHex(20)
+    };
+
+    const lpPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.isNull(lpPriceFeed);
+    assert.equal(spy.callCount, 1); // 1 error.
+  });
+
+  it("LPPriceFeed: shared BlockFinder", async function() {
+    const config = {
+      type: "lp",
+      poolAddress: web3.utils.randomHex(20),
+      tokenAddress: web3.utils.randomHex(20)
+    };
+
+    const lpPriceFeed1 = await createPriceFeed(logger, web3, networker, getTime, config);
+    const lpPriceFeed2 = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.strictEqual(lpPriceFeed2.blockFinder, lpPriceFeed1.blockFinder);
+  });
+
+  it("LPPriceFeed: optional parameters", async function() {
+    const tokenAddress = web3.utils.randomHex(20);
+    const poolAddress = web3.utils.randomHex(20);
+    const config = {
+      type: "lp",
+      tokenAddress,
+      poolAddress,
+      priceFeedDecimals: 6,
+      minTimeBetweenUpdates: 100
+    };
+
+    const lpPriceFeed = await createPriceFeed(logger, web3, networker, getTime, config);
+
+    assert.equal(lpPriceFeed.minTimeBetweenUpdates, 100);
+    assert.equal(lpPriceFeed.priceFeedDecimals, 6);
+    assert.equal(lpPriceFeed.pool.options.address, web3.utils.toChecksumAddress(poolAddress));
+    assert.equal(lpPriceFeed.token.options.address, web3.utils.toChecksumAddress(tokenAddress));
+  });
+
   it("Default reference price feed", async function() {
     const collateralToken = await Token.new("Wrapped Ether", "WETH", 18, { from: accounts[0] });
     const syntheticToken = await SyntheticToken.new("Test Synthetic Token", "SYNTH", 18, { from: accounts[0] });
@@ -741,12 +1013,19 @@ contract("CreatePriceFeed.js", function(accounts) {
       financialProductLibraryAddress: ZERO_ADDRESS
     };
 
-    let emp = await ExpiringMultiParty.new(constructorParams);
+    let financialContract = await ExpiringMultiParty.new(constructorParams);
 
     // Should create a valid price feed with no config.
-    const priceFeed = await createReferencePriceFeedForEmp(logger, web3, networker, getTime, emp.address, {
-      minTimeBetweenUpdates: 5
-    });
+    const priceFeed = await createReferencePriceFeedForFinancialContract(
+      logger,
+      web3,
+      networker,
+      getTime,
+      financialContract.address,
+      {
+        minTimeBetweenUpdates: 5
+      }
+    );
 
     assert.isTrue(priceFeed !== null);
     assert.equal(priceFeed.priceFeeds[0].minTimeBetweenUpdates, 5);
@@ -783,12 +1062,19 @@ contract("CreatePriceFeed.js", function(accounts) {
       financialProductLibraryAddress: ZERO_ADDRESS
     };
 
-    let emp = await ExpiringMultiParty.new(constructorParams);
+    let financialContract = await ExpiringMultiParty.new(constructorParams);
 
     // Should create a valid price feed with no config.
-    const priceFeed = await createReferencePriceFeedForEmp(logger, web3, networker, getTime, emp.address, {
-      minTimeBetweenUpdates: 5
-    });
+    const priceFeed = await createReferencePriceFeedForFinancialContract(
+      logger,
+      web3,
+      networker,
+      getTime,
+      financialContract.address,
+      {
+        minTimeBetweenUpdates: 5
+      }
+    );
 
     assert.isTrue(priceFeed !== null);
     assert.equal(priceFeed.priceFeeds[0].minTimeBetweenUpdates, 5);
@@ -826,12 +1112,12 @@ contract("CreatePriceFeed.js", function(accounts) {
       from: accounts[0]
     });
 
-    let emp = await ExpiringMultiParty.new(constructorParams);
+    let financialContract = await ExpiringMultiParty.new(constructorParams);
 
     let didThrow = false;
     try {
       // Should create an invlid price feed since an invalid identifier was provided.
-      await createReferencePriceFeedForEmp(logger, web3, networker, getTime, emp.address);
+      await createReferencePriceFeedForFinancialContract(logger, web3, networker, getTime, financialContract.address);
     } catch (error) {
       didThrow = true;
     }
@@ -844,7 +1130,7 @@ contract("CreatePriceFeed.js", function(accounts) {
       type: "coinmarketcap",
       apiKey,
       symbol,
-      convert,
+      quoteCurrency,
       lookback,
       minTimeBetweenUpdates
     };
@@ -854,7 +1140,7 @@ contract("CreatePriceFeed.js", function(accounts) {
     assert.isTrue(validCoinMarketCapFeed instanceof CoinMarketCapPriceFeed);
     assert.equal(validCoinMarketCapFeed.apiKey, apiKey);
     assert.equal(validCoinMarketCapFeed.symbol, symbol);
-    assert.equal(validCoinMarketCapFeed.convert, convert);
+    assert.equal(validCoinMarketCapFeed.quoteCurrency, quoteCurrency);
     assert.equal(validCoinMarketCapFeed.lookback, lookback);
     assert.equal(validCoinMarketCapFeed.getTime(), getTime());
     assert.equal(validCoinMarketCapFeed.invertPrice, undefined);
@@ -865,20 +1151,17 @@ contract("CreatePriceFeed.js", function(accounts) {
       type: "coinmarketcap",
       apiKey,
       symbol,
-      convert,
+      quoteCurrency,
       lookback,
       minTimeBetweenUpdates
     };
 
+    assert.equal(await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, apiKey: undefined }), null);
+    assert.equal(await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, symbol: undefined }), null);
     assert.equal(
-      await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, apiKey: undefined }),
+      await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, quoteCurrency: undefined }),
       null
     );
-    assert.equal(
-      await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, symbol: undefined }),
-      null
-    );
-    assert.equal(await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, convert: undefined }), null);
     assert.equal(
       await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, lookback: undefined }),
       null
@@ -893,7 +1176,7 @@ contract("CreatePriceFeed.js", function(accounts) {
     const config = {
       type: "coingecko",
       contractAddress,
-      currency,
+      quoteCurrency,
       lookback,
       minTimeBetweenUpdates
     };
@@ -902,7 +1185,7 @@ contract("CreatePriceFeed.js", function(accounts) {
 
     assert.isTrue(validCoinGeckoFeed instanceof CoinGeckoPriceFeed);
     assert.equal(validCoinGeckoFeed.contractAddress, contractAddress);
-    assert.equal(validCoinGeckoFeed.currency, currency);
+    assert.equal(validCoinGeckoFeed.quoteCurrency, quoteCurrency);
     assert.equal(validCoinGeckoFeed.lookback, lookback);
     assert.equal(validCoinGeckoFeed.getTime(), getTime());
     assert.equal(validCoinGeckoFeed.invertPrice, undefined);
@@ -912,7 +1195,7 @@ contract("CreatePriceFeed.js", function(accounts) {
     const validConfig = {
       type: "coingecko",
       contractAddress,
-      currency,
+      quoteCurrency,
       lookback,
       minTimeBetweenUpdates
     };
@@ -921,7 +1204,10 @@ contract("CreatePriceFeed.js", function(accounts) {
       await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, contractAddress: undefined }),
       null
     );
-    assert.equal(await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, currency: undefined }), null);
+    assert.equal(
+      await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, quoteCurrency: undefined }),
+      null
+    );
     assert.equal(
       await createPriceFeed(logger, web3, networker, getTime, { ...validConfig, lookback: undefined }),
       null
@@ -931,5 +1217,4 @@ contract("CreatePriceFeed.js", function(accounts) {
       null
     );
   });
-
 });

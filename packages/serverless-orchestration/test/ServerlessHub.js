@@ -33,7 +33,7 @@ contract("ServerlessHub.js", function(accounts) {
   let syntheticToken;
   let emp;
   let uniswap;
-  let defaultUniswapPricefeedConfig;
+  let defaultPricefeedConfig;
   let identifierWhitelist;
 
   let hubSpy;
@@ -124,11 +124,10 @@ contract("ServerlessHub.js", function(accounts) {
 
     uniswap = await UniswapMock.new();
 
-    defaultUniswapPricefeedConfig = {
-      type: "uniswap",
-      uniswapAddress: uniswap.address,
-      twapLength: 1,
-      lookback: 1
+    defaultPricefeedConfig = {
+      type: "test",
+      currentPrice: "1",
+      historicalPrice: "1"
     };
 
     // Set two uniswap prices to give it a little history.
@@ -180,7 +179,8 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: emp.address,
-          TOKEN_PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig
+          TOKEN_PRICE_FEED_CONFIG: defaultPricefeedConfig,
+          MONITOR_CONFIG: { contractVersion: "latest", contractType: "ExpiringMultiParty" }
         }
       }
     };
@@ -212,7 +212,8 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: emp.address,
-          TOKEN_PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig
+          TOKEN_PRICE_FEED_CONFIG: defaultPricefeedConfig,
+          MONITOR_CONFIG: { contractVersion: "latest", contractType: "ExpiringMultiParty" }
         }
       }
     };
@@ -259,7 +260,8 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: emp.address,
-          TOKEN_PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig
+          TOKEN_PRICE_FEED_CONFIG: defaultPricefeedConfig,
+          MONITOR_CONFIG: { contractVersion: "latest", contractType: "ExpiringMultiParty" }
         }
       }
     };
@@ -315,7 +317,8 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: emp.address,
-          TOKEN_PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig
+          TOKEN_PRICE_FEED_CONFIG: defaultPricefeedConfig,
+          MONITOR_CONFIG: { contractVersion: "latest", contractType: "ExpiringMultiParty" }
         }
       },
       testServerlessLiquidator: {
@@ -324,7 +327,7 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: emp.address,
-          PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig,
+          PRICE_FEED_CONFIG: defaultPricefeedConfig,
           LIQUIDATOR_CONFIG: { contractVersion: "latest", contractType: "ExpiringMultiParty" }
         }
       },
@@ -334,7 +337,8 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: emp.address,
-          PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig
+          PRICE_FEED_CONFIG: defaultPricefeedConfig,
+          DISPUTER_CONFIG: { contractVersion: "latest", contractType: "ExpiringMultiParty" }
         }
       }
     };
@@ -383,7 +387,8 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: emp.address,
-          TOKEN_PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig
+          TOKEN_PRICE_FEED_CONFIG: defaultPricefeedConfig,
+          MONITOR_CONFIG: { contractVersion: "latest", contractType: "ExpiringMultiParty" }
         }
       },
       testServerlessMonitorError: {
@@ -393,7 +398,7 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: emp.address,
-          PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig
+          PRICE_FEED_CONFIG: defaultPricefeedConfig
         }
       },
       testServerlessMonitorError2: {
@@ -403,7 +408,8 @@ contract("ServerlessHub.js", function(accounts) {
           CUSTOM_NODE_URL: web3.currentProvider.host,
           POLLING_DELAY: 0,
           EMP_ADDRESS: "0x0000000000000000000000000000000000000000",
-          PRICE_FEED_CONFIG: defaultUniswapPricefeedConfig
+          PRICE_FEED_CONFIG: defaultPricefeedConfig,
+          MONITOR_CONFIG: { contractVersion: "latest", contractType: "ExpiringMultiParty" }
         }
       }
     };

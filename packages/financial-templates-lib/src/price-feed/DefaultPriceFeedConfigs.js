@@ -81,8 +81,7 @@ const defaultConfigs = {
           {
             type: "uniswap",
             uniswapAddress: "0xc50ef7861153c51d383d9a7d48e6c9467fb90c38",
-            twapLength: 2,
-            poolDecimals: 6
+            twapLength: 2
           }
         ]
       },
@@ -94,8 +93,7 @@ const defaultConfigs = {
           {
             type: "uniswap",
             uniswapAddress: "0xa0abda1f980e03d7eadb78aed8fc1f2dd0fe83dd",
-            twapLength: 2,
-            poolDecimals: 6
+            twapLength: 2
           }
         ]
       },
@@ -154,8 +152,7 @@ const defaultConfigs = {
           {
             type: "uniswap",
             uniswapAddress: "0xc50ef7861153c51d383d9a7d48e6c9467fb90c38",
-            twapLength: 2,
-            poolDecimals: 6
+            twapLength: 2
           }
         ]
       },
@@ -167,8 +164,7 @@ const defaultConfigs = {
           {
             type: "uniswap",
             uniswapAddress: "0xa0abda1f980e03d7eadb78aed8fc1f2dd0fe83dd",
-            twapLength: 2,
-            poolDecimals: 6
+            twapLength: 2
           }
         ]
       },
@@ -220,8 +216,7 @@ const defaultConfigs = {
           {
             type: "uniswap",
             uniswapAddress: "0xc50ef7861153c51d383d9a7d48e6c9467fb90c38",
-            twapLength: 2,
-            poolDecimals: 6
+            twapLength: 2
           }
         ]
       },
@@ -233,8 +228,7 @@ const defaultConfigs = {
           {
             type: "uniswap",
             uniswapAddress: "0xa0abda1f980e03d7eadb78aed8fc1f2dd0fe83dd",
-            twapLength: 2,
-            poolDecimals: 6
+            twapLength: 2
           }
         ]
       },
@@ -287,11 +281,25 @@ const defaultConfigs = {
     experimentalPriceFeeds: [
       {
         type: "medianizer",
-        medianizedFeeds: [{ type: "cryptowatch", exchange: "uniswap-v2", pair: "fraxusdc" }]
+        medianizedFeeds: [
+          // FRAX/USDC:
+          {
+            type: "uniswap",
+            uniswapAddress: "0x97c4adc5d28a86f9470c70dd91dc6cc2f20d2d4d",
+            twapLength: 2
+          }
+        ]
       },
       {
         type: "medianizer",
-        medianizedFeeds: [{ type: "cryptowatch", exchange: "uniswap-v2", pair: "esdusdc" }]
+        medianizedFeeds: [
+          // ESD/USDC:
+          {
+            type: "uniswap",
+            uniswapAddress: "0x88ff79eb2bc5850f27315415da8685282c7610f9",
+            twapLength: 2
+          }
+        ]
       },
       {
         type: "medianizer",
@@ -340,6 +348,12 @@ const defaultConfigs = {
     uniswapAddress: "0x683ea972ffa19b7bad6d6be0440e0a8465dba71c",
     twapLength: 7200
   },
+  "COMPUSDC-APR-MAR28/USDC": {
+    type: "uniswap",
+    uniswapAddress: "0xd8ecab1d50c3335d01885c17b1ce498105238f24",
+    twapLength: 7200,
+    poolDecimals: 6
+  },
   BTCDOM: {
     type: "domfi",
     pair: "BTCDOM",
@@ -361,6 +375,56 @@ const defaultConfigs = {
       { type: "cryptowatch", exchange: "gateio", pair: "amplusdt" },
       { type: "cryptowatch", exchange: "bitfinex", pair: "amplusd" }
     ]
+  },
+  DEFI_PULSE_TOTAL_TVL: {
+    type: "defipulsetotal",
+    lookback: 604800,
+    minTimeBetweenUpdates: 600
+  },
+  CNYUSD: {
+    type: "tradermade",
+    pair: "CNYUSD",
+    minuteLookback: 7200, // interval=minute allowed lookback up to 2 days
+    hourlyLookback: 604800, // interval=hour allowed lookback up to 2 months
+    minTimeBetweenUpdates: 600
+  },
+  PHPDAI: {
+    type: "medianizer",
+    computeMean: true,
+    lookback: 7200,
+    minTimeBetweenUpdates: 60,
+    medianizedFeeds: [
+      {
+        type: "coinmarketcap",
+        symbol: "DAI",
+        convert: "PHP",
+        invertPrice: true
+      },
+      {
+        type: "coingecko",
+        contractAddress: "0x6b175474e89094c44da98b954eedeac495271d0f",
+        currency: "php",
+        invertPrice: true
+      }
+    ]
+  },
+  // The following identifiers can be used to test how `CreatePriceFeed` interacts with this
+  // default price feed config.
+  TEST8DECIMALS: {
+    // This type should map to the PriceFeedMock in `CreatePriceFeed`
+    type: "test"
+  },
+  TEST6DECIMALS: {
+    // This type should map to the PriceFeedMock in `CreatePriceFeed`
+    type: "test"
+  },
+  TEST18DECIMALS: {
+    // This type should map to the PriceFeedMock in `CreatePriceFeed`
+    type: "test"
+  },
+  INVALID: {
+    // This type should map to the InvalidPriceFeedMock in `CreatePriceFeed`
+    type: "invalid"
   }
 };
 

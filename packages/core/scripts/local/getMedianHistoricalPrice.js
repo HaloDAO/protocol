@@ -8,7 +8,7 @@
  * @dev How to run: yarn truffle exec ./packages/core/scripts/local/getMedianHistoricalPrice.js --network mainnet_mnemonic --identifier USDBTC --time 1601503200
  */
 const { fromWei } = web3.utils;
-const { createReferencePriceFeedForEmp, Networker } = require("@uma/financial-templates-lib");
+const { createReferencePriceFeedForFinancialContract, Networker } = require("@uma/financial-templates-lib");
 const winston = require("winston");
 const argv = require("minimist")(process.argv.slice(), { string: ["identifier", "time"] });
 require("dotenv").config();
@@ -18,7 +18,8 @@ const UMIP_PRECISION = {
   USDETH: 5,
   BTCDOM: 2,
   ALTDOM: 2,
-  BCHNBTC: 8
+  BCHNBTC: 8,
+  "GASETH-TWAP-1Mx1M": 18
 };
 const DEFAULT_PRECISION = 5;
 
@@ -47,7 +48,7 @@ async function getMedianHistoricalPrice(callback) {
       // Append price feed config params from environment such as "apiKey" for CryptoWatch price feeds.
       ...(process.env.PRICE_FEED_CONFIG ? JSON.parse(process.env.PRICE_FEED_CONFIG) : {})
     };
-    const medianizerPriceFeed = await createReferencePriceFeedForEmp(
+    const medianizerPriceFeed = await createReferencePriceFeedForFinancialContract(
       dummyLogger,
       web3,
       new Networker(dummyLogger),
@@ -75,7 +76,7 @@ async function getMedianHistoricalPrice(callback) {
 
     // The default exchanges to fetch prices for (and from which the median is derived) are based on UMIP's and can be found in:
     // protocol/financial-templates-lib/src/price-feed/CreatePriceFeed.js
-    const queryPrice = medianizerPriceFeed.getHistoricalPrice(queryTime, true);
+    const queryPrice = await medianizerPriceFeed.getHistoricalPrice(queryTime, true);
     const precisionToUse = UMIP_PRECISION[queryIdentifier] ? UMIP_PRECISION[queryIdentifier] : DEFAULT_PRECISION;
     console.log(`\n⚠️ Truncating price to ${precisionToUse} decimals`);
     console.log(
