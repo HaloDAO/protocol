@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const tdr = require("truffle-deploy-registry");
 
+let addresses = {};
+
 // To prevent a call to migrate --reset from overwriting prevously deployed contract instances, use the following
 // command line parameters:
 // --keep_finder prevents the Finder contract from being redeployed if previously deployed.
@@ -110,6 +112,9 @@ async function deploy(deployer, network, contractType, ...args) {
     await addToTvr(contractType.address, args, network, contractInstance.constructor.network_id);
   }
 
+  // Add contract address to cache (in which later is printed out in a json file)
+  addresses[contractType.contractName] = contractInstance.address;
+
   // Return relevant info about the contract.
   return {
     contract: contractInstance,
@@ -202,5 +207,6 @@ module.exports = {
   setToExistingAddress,
   getKeysForNetwork,
   addToTdr,
-  isPublicNetwork
+  isPublicNetwork,
+  addresses
 };
