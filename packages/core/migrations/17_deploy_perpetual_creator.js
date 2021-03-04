@@ -5,6 +5,8 @@ const TokenFactory = artifacts.require("TokenFactory");
 const Timer = artifacts.require("Timer");
 const Registry = artifacts.require("Registry");
 const { RegistryRolesEnum, getKeysForNetwork, deploy, enableControllableTiming } = require("@uma/common");
+const fs = require("fs");
+const { addresses } = require("../../common/src/MigrationUtils");
 
 module.exports = async function(deployer, network, accounts) {
   const keys = getKeysForNetwork(network, accounts);
@@ -49,4 +51,6 @@ module.exports = async function(deployer, network, accounts) {
   );
 
   await registry.addMember(RegistryRolesEnum.CONTRACT_CREATOR, perpetualCreator.address);
+
+  fs.writeFileSync("../minter/test/uma-contract-address.json", JSON.stringify(addresses, null, 2));
 };
